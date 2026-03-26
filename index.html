@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>CardVault</title>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="CardVault"/>
+<meta name="theme-color" content="#07080F"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:#07080F;height:100%}
+body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
+input,select,button{font-family:'Outfit',sans-serif;-webkit-appearance:none}
+.cc:active{transform:scale(0.97)!important}
+.bh:active{transform:scale(0.96)!important;opacity:0.85!important}
+.at{transition:all 0.18s}.tb{transition:color 0.15s}
+.cc:hover .cdel{opacity:1!important}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.ap{animation:pulse 2.8s ease-in-out infinite}.fi{animation:fi 0.22s ease forwards}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const {useState,useEffect,useRef}=React;
+const uid=()=>Math.random().toString(36).slice(2,9);
+const now=()=>new Date().toISOString();
+const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const ld=(k)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch(e){return null}};
+function curQ(){const m=new Date().getMonth();return m<3?"Q1":m<6?"Q2":m<9?"Q3":"Q4"}
+function pEnd(p,s){const d=new Date(),y=d.getFullYear(),m=d.getMonth();
+  if(p==="monthly")return new Date(y,m+1,0);
+  if(p==="quarterly")return m<3?new Date(y,2,31):m<6?new Date(y,5,30):m<9?new Date(y,8,30):new Date(y,11,31);
+  if(p==="semi-annual")return s==="H2"?new Date(y,11,31):new Date(y,5,30);
+  if(p==="annual")return new Date(y,11,31);
+  return null}
+function pStart(p,s){const d=new Date(),y=d.getFullYear(),m=d.getMonth();
+  if(p==="monthly")return new Date(y,m,1);
+  if(p==="quarterly")return m<3?new Date(y,0,1):m<6?new Date(y,3,1):m<9?new Date(y,6,1):new Date(y,9,1);
+  if(p==="semi-annual")return s==="H2"?new Date(y,6,1):new Date(y,0,1);
+  if(p==="annual")return new Date(y,0,1);
+  return null}
+function dLeft(d){if(!d)return null;const t=new Date();t.setHours(0,0,0,0);return Math.ceil((d-t)/86400000)}
+function isExp(b){
+  if(b.used||b.per==="ongoing")return false;
+  if((b.per==="semi-annual"||b.per==="quarterly")&&pStart(b.per,b.semi)>new Date())return false;
+  const d=dLeft(pEnd(b.per,b.semi));if(d==null||d<0)return false;
+  return d<=(b.per==="annual"?30:(b.per==="semi-annual"||b.per==="quarterly")?14:7)}
+function needsReset(b){
+  if(b.per==="ongoing")return false;
+  const ps=pStart(b.per,b.semi);return ps&&ps<=new Date()&&ps>new Date(b.lastReset||0)}
+function applyResets(cards){return cards.map(c=>({...c,benefits:c.benefits.map(b=>needsReset(b)?{...b,used:false,usedCount:(b.usedCount||0)+(b.used?1:0),lastReset:now()}:b)}))}
+function curM(){const ms=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return ms[new Date().getMonth()]}
+function pLbl(p,s){
+  if(p==="monthly")return"Monthly ("+curM()+")";if(p==="quarterly")return"Quarterly ("+curQ()+")";
+  if(p==="semi-annual")return s==="H1"?"Jan-Jun":"Jul-Dec";if(p==="annual")return"Annual";return"Ongoing"}
+const cIco=c=>({travel:"✈",dining:"◈",transport:"◎",entertainment:"◆",shopping:"◇",wellness:"◉",other:"★"}[c]||"★");
+
+
+function QuarterlyPanel({card}){
+  const q=curQ();const m=new Date().getMonth();
+  const qEnd=m<3?new Date(new Date().getFullYear(),2,31):m<6?new Date(new Date().getFullYear(),5,30):m<9?new Date(new Date().getFullYear(),8,30):new Date(new Date().getFullYear(),11,31);
+  const dl=dLeft(qEnd);
+  const moBens=card.benefits.filter(b=>b.per==="monthly"&&b.val>0);
+  const qBens=card.benefits.filter(b=>b.per==="quarterly"&&b.val>0);
+  const saBens=card.benefits.filter(b=>b.per==="semi-annual"&&b.val>0&&((m<6&&b.semi==="H1")||(m>=6&&b.semi==="H2")));
+  const moTotal=moBens.reduce((s,b)=>s+b.val,0)*3;
+  const moMonthsDone=m%3;
+  const moPast=moBens.reduce((s,b)=>s+b.val,0)*moMonthsDone;
+  const moUsed=moBens.reduce((s,b)=>s+b.val*(b.used?1:0),0);
+  const qTotal=qBens.reduce((s,b)=>s+b.val,0);
+  const qUsed=qBens.reduce((s,b)=>s+b.val*(b.used?1:0),0);
+  const saTotal=saBens.reduce((s,b)=>s+b.val,0);
+  const saUsed=saBens.reduce((s,b)=>s+b.val*(b.used?1:0),0);
+  const grandTotal=moTotal+qTotal+saTotal;
+  const grandUsed=moUsed+moPast+qUsed+saUsed;
+  if(grandTotal===0)return null;
+  const pct=grandTotal>0?Math.min(100,Math.round(grandUsed/grandTotal*100)):0;
+  const ac=card.ac||"#C9A84C";
+  return <div style={{background:"rgba(255,255,255,0.025)",border:"1px solid "+BD,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:14}}>📊</span>
+        <span style={{fontSize:12,fontWeight:600,color:TX}}>{q} Quarterly Tracker</span>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:11,color:MT}}>{dl}d left in {q}</span>
+        <span style={{fontSize:13,fontWeight:700,color:ac}}>${grandUsed}<span style={{color:MT,fontWeight:400}}>/${grandTotal}</span></span>
+      </div>
+    </div>
+    <div style={{height:5,background:"rgba(255,255,255,0.07)",borderRadius:3,overflow:"hidden",marginBottom:10}}>
+      <div style={{height:"100%",width:pct+"%",background:"linear-gradient(90deg,"+ac+"88,"+ac+")",borderRadius:3,transition:"width 0.5s"}}/>
+    </div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+      {moBens.length>0&&<div style={{fontSize:10,background:"rgba(255,255,255,0.04)",border:"1px solid "+BD,borderRadius:16,padding:"3px 10px",color:MT}}>
+        <span style={{color:ac,fontWeight:600}}>Monthly</span> ${moTotal} <span style={{opacity:0.5}}>({moBens.length} x 3mo)</span>
+      </div>}
+      {qBens.length>0&&<div style={{fontSize:10,background:"rgba(255,255,255,0.04)",border:"1px solid "+BD,borderRadius:16,padding:"3px 10px",color:MT}}>
+        <span style={{color:ac,fontWeight:600}}>Quarterly</span> ${qTotal} <span style={{opacity:0.5}}>({qBens.length} credits)</span>
+      </div>}
+      {saBens.length>0&&<div style={{fontSize:10,background:"rgba(255,255,255,0.04)",border:"1px solid "+BD,borderRadius:16,padding:"3px 10px",color:MT}}>
+        <span style={{color:ac,fontWeight:600}}>Semi-Ann</span> ${saTotal} <span style={{opacity:0.5}}>(this half)</span>
+      </div>}
+    </div>
+  </div>}
+const LIB=[
+{n:"Chase Sapphire Reserve",sh:"CSR",net:"Visa Infinite",fee:795,gr:"linear-gradient(135deg,#06173A 0%,#0C2D6E 55%,#06173A 100%)",ac:"#C9A84C",tc:"#EAD8A5",b:[{nm:"$300 Annual Travel Credit",dc:"Auto-applied to any travel purchase — flights, hotels, rideshare, tolls, parking, transit",val:300,per:"annual",cat:"travel"},{nm:"$250 The Edit Hotel Credit 1",dc:"First of two $250 credits for 2+ night stays at The Edit by Chase Travel (usable anytime in 2026)",val:250,per:"semi-annual",semi:"H1",cat:"travel"},{nm:"$250 The Edit Hotel Credit 2",dc:"Second of two $250 credits for 2+ night stays at The Edit by Chase Travel (usable anytime in 2026)",val:250,per:"semi-annual",semi:"H2",cat:"travel"},{nm:"$150 Exclusive Tables H1",dc:"Statement credit at Sapphire Reserve Exclusive Tables restaurants — Jan to Jun",val:150,per:"semi-annual",semi:"H1",cat:"dining"},{nm:"$150 Exclusive Tables H2",dc:"Statement credit at Sapphire Reserve Exclusive Tables restaurants — Jul to Dec",val:150,per:"semi-annual",semi:"H2",cat:"dining"},{nm:"$150 StubHub Viagogo H1",dc:"Statement credit for StubHub.com or viagogo.com — Jan to Jun (through Dec 2027, activation required)",val:150,per:"semi-annual",semi:"H1",cat:"entertainment"},{nm:"$150 StubHub Viagogo H2",dc:"Statement credit for StubHub.com or viagogo.com — Jul to Dec (through Dec 2027, activation required)",val:150,per:"semi-annual",semi:"H2",cat:"entertainment"},{nm:"$250 Apple TV+ and Apple Music",dc:"Complimentary Apple TV+ and Apple Music subscriptions (valid through June 2027, activation required)",val:250,per:"annual",cat:"entertainment"},{nm:"$25/mo DoorDash Credits",dc:"DashPass members get $5 restaurant promo + two $10 non-restaurant promos monthly — through Dec 2027",val:25,per:"monthly",cat:"dining"},{nm:"$10/mo Lyft Credit",dc:"$10 monthly in-app credit for Lyft rides + 5x points on Lyft through Sep 30, 2027",val:10,per:"monthly",cat:"transport"},{nm:"$10/mo Peloton Credit",dc:"Monthly statement credit for Peloton membership + 10x pts on equipment (through Dec 2027, activation required)",val:10,per:"monthly",cat:"wellness"},{nm:"$250 Select Hotels 2026",dc:"One-time 2026 credit for 2+ night stays at IHG, Omni, Virgin, Montage, Minor, Pan Pacific via Chase Travel",val:250,per:"annual",cat:"travel"},{nm:"Global Entry TSA Pre NEXUS",dc:"Up to $120 application fee credit every 4 years",val:120,per:"annual",cat:"travel"},{nm:"Priority Pass and Sapphire Lounges",dc:"Unlimited Chase Sapphire Lounges + 1300+ Priority Pass lounges + Air Canada Maple Leaf Lounges with 2 guests",val:0,per:"ongoing",cat:"travel"},{nm:"IHG Platinum Elite Status",dc:"Complimentary IHG One Rewards Platinum Elite through Dec 31, 2027 (activation required)",val:0,per:"ongoing",cat:"travel"},{nm:"Complimentary DashPass",dc:"$0 delivery fees and lower service fees on DoorDash — activate by Dec 31, 2027 ($120/yr value)",val:0,per:"ongoing",cat:"dining"}]},
+{n:"Chase Sapphire Preferred",sh:"CSP",net:"Visa Signature",fee:95,gr:"linear-gradient(135deg,#06173A 0%,#0C2D6E 55%,#06173A 100%)",ac:"#7BA4D4",tc:"#D6E8FA",b:[{nm:"$50 Annual Hotel Credit",dc:"Statement credit for hotel stays booked through Chase Travel each account anniversary year",val:50,per:"annual",cat:"travel"},{nm:"$10/mo Dining Credit",dc:"Monthly statement credit at select Chase dining partners",val:10,per:"monthly",cat:"dining"},{nm:"$10/mo DoorDash Credit",dc:"DashPass members get up to $10/mo off groceries, beauty, electronics and more — through Dec 2027",val:10,per:"monthly",cat:"dining"},{nm:"10% Anniversary Bonus",dc:"Receive bonus points each anniversary equal to 10% of your total purchases for the prior year",val:0,per:"annual",cat:"other"},{nm:"Global Entry TSA Pre",dc:"Up to $100 application fee credit",val:100,per:"annual",cat:"travel"},{nm:"Complimentary DashPass",dc:"Complimentary DashPass membership for 12 months — $120 value (activate by Dec 31, 2027)",val:0,per:"ongoing",cat:"dining"}]},
+{n:"Chase Freedom Flex",sh:"Freedom Flex",net:"Mastercard",fee:0,gr:"linear-gradient(135deg,#0A1C3B 0%,#153770 100%)",ac:"#4A90E2",tc:"#D0E6FA",b:[{nm:"5% Rotating Categories",dc:"5% cash back on up to $1500 in rotating quarterly categories — activate each quarter via Chase app",val:0,per:"quarterly",cat:"other"},{nm:"5% on Chase Travel",dc:"5% cash back on travel through Chase Travel portal",val:0,per:"ongoing",cat:"travel"},{nm:"3% on Dining",dc:"3% cash back at restaurants including takeout and delivery",val:0,per:"ongoing",cat:"dining"},{nm:"3% on Drugstores",dc:"3% cash back at drugstores",val:0,per:"ongoing",cat:"other"},{nm:"Cell Phone Protection",dc:"Up to $800 per claim against damage or theft when you pay phone bill with card ($50 deductible)",val:0,per:"ongoing",cat:"other"}]},
+{n:"Chase Freedom Unlimited",sh:"Freedom Unlmt",net:"Visa",fee:0,gr:"linear-gradient(135deg,#0A1C3B 0%,#1A3A6E 100%)",ac:"#6FA8DC",tc:"#D0E6FA",b:[{nm:"1.5% Cash Back on Everything",dc:"Unlimited 1.5% cash back on all purchases",val:0,per:"ongoing",cat:"other"},{nm:"5% on Chase Travel",dc:"5% cash back on travel through Chase Travel portal",val:0,per:"ongoing",cat:"travel"},{nm:"3% on Dining",dc:"3% cash back at restaurants",val:0,per:"ongoing",cat:"dining"},{nm:"3% on Drugstores",dc:"3% cash back at drugstores",val:0,per:"ongoing",cat:"other"}]},
+{n:"Chase World of Hyatt",sh:"Hyatt",net:"Visa Signature",fee:95,gr:"linear-gradient(135deg,#1A0D00 0%,#5C2E00 55%,#1A0D00 100%)",ac:"#C28B3A",tc:"#F5E6CC",b:[{nm:"Annual Free Night Cat 1-4",dc:"Free night at any Category 1-4 Hyatt property each card anniversary year",val:0,per:"annual",cat:"travel"},{nm:"5 Elite Night Credits",dc:"5 tier-qualifying night credits toward Discoverist/Explorist/Globalist status each year",val:0,per:"annual",cat:"travel"},{nm:"Discoverist Status",dc:"Automatic Hyatt Discoverist — 2pm late checkout and preferred room upgrades",val:0,per:"ongoing",cat:"travel"},{nm:"2nd Free Night at 15k Spend",dc:"Second Cat 1-4 free night after spending $15000 in a calendar year",val:0,per:"annual",cat:"travel"},{nm:"Complimentary DashPass",dc:"12 months complimentary DashPass — activate by Dec 31, 2027",val:0,per:"annual",cat:"dining"}]},
+{n:"Chase IHG One Rewards Premier",sh:"IHG Premier",net:"Visa Signature",fee:99,gr:"linear-gradient(135deg,#001A00 0%,#004D1A 55%,#001A00 100%)",ac:"#4DB36A",tc:"#D5F0DC",b:[{nm:"Annual Free Night up to 40k pts",dc:"Anniversary free night at any IHG property up to 40000 pts — top up with your own points",val:0,per:"annual",cat:"travel"},{nm:"4th Night Free on Award Stays",dc:"Fourth night free when redeeming points for 4+ consecutive IHG nights",val:0,per:"ongoing",cat:"travel"},{nm:"IHG Platinum Elite Status",dc:"Automatic Platinum Elite — room upgrades, late checkout, 50% bonus points",val:0,per:"ongoing",cat:"travel"},{nm:"$25 United TravelBank Jan",dc:"$25 United TravelBank Cash deposited each January after linking MileagePlus account",val:25,per:"annual",cat:"travel"},{nm:"$25 United TravelBank Jul",dc:"$25 United TravelBank Cash deposited each July after linking MileagePlus account",val:25,per:"annual",cat:"travel"},{nm:"Global Entry TSA Pre NEXUS",dc:"Up to $120 application fee credit every 4 years",val:120,per:"annual",cat:"travel"}]},
+{n:"Chase Marriott Bonvoy Boundless",sh:"Bonvoy Boundless",net:"Visa Infinite",fee:95,gr:"linear-gradient(135deg,#1A0005 0%,#560018 55%,#1A0005 100%)",ac:"#C0995A",tc:"#F5EED8",b:[{nm:"Annual Free Night up to 35k pts",dc:"Free night at any Marriott property up to 35000 pts each anniversary — top up with up to 25000 more pts",val:0,per:"annual",cat:"travel"},{nm:"15 Elite Night Credits",dc:"Annual Marriott Bonvoy elite night credits toward Silver/Gold/Platinum/Titanium status",val:0,per:"annual",cat:"travel"},{nm:"Silver Elite Status",dc:"Automatic Marriott Bonvoy Silver Elite — 10% bonus points on eligible paid stays",val:0,per:"ongoing",cat:"travel"},{nm:"2nd Free Night at 15k Spend",dc:"Second free night up to 35k pts after spending $15000 in a calendar year",val:0,per:"annual",cat:"travel"}]},
+{n:"Chase Southwest Plus",sh:"SW Plus",net:"Visa",fee:99,gr:"linear-gradient(135deg,#1A0500 0%,#6B1A00 55%,#1A0500 100%)",ac:"#F5820A",tc:"#FEE8CC",b:[{nm:"3000 Anniversary Points",dc:"3000 bonus Rapid Rewards points each card anniversary year",val:0,per:"annual",cat:"travel"},{nm:"10000 Companion Pass Boost",dc:"Annual one-time boost of 10000 Companion Pass qualifying points",val:0,per:"annual",cat:"travel"},{nm:"Free First Checked Bag",dc:"First checked bag free for cardholder and up to 8 companions on same reservation",val:0,per:"ongoing",cat:"travel"},{nm:"Group 5 Boarding",dc:"Board with Group 5 on all Southwest flights",val:0,per:"ongoing",cat:"travel"},{nm:"25% Inflight Discount",dc:"25% back as statement credit on all Southwest inflight purchases",val:0,per:"ongoing",cat:"travel"}]},
+{n:"Chase Southwest Premier",sh:"SW Premier",net:"Visa Signature",fee:149,gr:"linear-gradient(135deg,#1A0500 0%,#6B1A00 55%,#1A0500 100%)",ac:"#F5A030",tc:"#FEF0CC",b:[{nm:"6000 Anniversary Points",dc:"6000 bonus Rapid Rewards points each card anniversary year",val:0,per:"annual",cat:"travel"},{nm:"10000 Companion Pass Boost",dc:"Annual one-time boost of 10000 Companion Pass qualifying points",val:0,per:"annual",cat:"travel"},{nm:"Free First Checked Bag",dc:"First checked bag free for cardholder and up to 8 companions",val:0,per:"ongoing",cat:"travel"},{nm:"Group 5 Boarding",dc:"Board with Group 5 on all Southwest flights",val:0,per:"ongoing",cat:"travel"},{nm:"25% Inflight Discount",dc:"25% back on inflight purchases",val:0,per:"ongoing",cat:"travel"},{nm:"1500 TQPs per 5k Spend",dc:"Earn 1500 Tier Qualifying Points per $5000 spent annually toward A-List status",val:0,per:"ongoing",cat:"travel"}]},
+{n:"Chase Southwest Priority",sh:"SW Priority",net:"Visa Signature",fee:229,gr:"linear-gradient(135deg,#1A0500 0%,#5C1500 55%,#1A0500 100%)",ac:"#FFB347",tc:"#FFF0D6",b:[{nm:"7500 Anniversary Points",dc:"7500 bonus Rapid Rewards points each card anniversary year",val:0,per:"annual",cat:"travel"},{nm:"$75 Southwest Travel Credit",dc:"Annual $75 Southwest Airlines travel credit — auto-applied to Southwest purchases",val:75,per:"annual",cat:"travel"},{nm:"10000 Companion Pass Boost",dc:"Annual one-time boost of 10000 Companion Pass qualifying points",val:0,per:"annual",cat:"travel"},{nm:"Free First Checked Bag",dc:"First checked bag free for cardholder and up to 8 companions",val:0,per:"ongoing",cat:"travel"},{nm:"Group 4 Boarding",dc:"Board with Group 4 on all Southwest flights — earlier than Group 5",val:0,per:"ongoing",cat:"travel"},{nm:"25% Inflight Discount",dc:"25% back on inflight purchases",val:0,per:"ongoing",cat:"travel"},{nm:"2500 TQPs per 5k Spend",dc:"Earn 2500 Tier Qualifying Points per $5000 spent annually toward A-List status",val:0,per:"ongoing",cat:"travel"}]},
+{n:"Amex Platinum",sh:"Platinum",net:"American Express",fee:895,gr:"linear-gradient(135deg,#1A1A1A 0%,#3D3D3D 50%,#1A1A1A 100%)",ac:"#C0C0C0",tc:"#EDEDED",b:[{nm:"$200 Airline Fee Credit",dc:"Up to $200/yr in statement credits for incidental fees (bags, seats, in-flight food) with 1 selected airline — enrollment required, resets each calendar year",val:200,per:"annual",cat:"travel"},{nm:"$300 Hotel Credit H1",dc:"Prepaid Fine Hotels+Resorts or Hotel Collection stays via AmexTravel — Jan to Jun (2-night min for THC)",val:300,per:"semi-annual",semi:"H1",cat:"travel"},{nm:"$300 Hotel Credit H2",dc:"Prepaid Fine Hotels+Resorts or Hotel Collection stays via AmexTravel — Jul to Dec (2-night min for THC)",val:300,per:"semi-annual",semi:"H2",cat:"travel"},{nm:"$100 Resy Dining Credit",dc:"Up to $100 per quarter at U.S. Resy-affiliated restaurants (enrollment required). Resets quarterly.",val:100,per:"quarterly",cat:"dining"},{nm:"$75 lululemon Credit",dc:"Up to $75 per quarter at U.S. lululemon stores or lululemon.com (enrollment required, excludes outlets). Resets quarterly.",val:75,per:"quarterly",cat:"shopping"},{nm:"$25/mo Digital Entertainment",dc:"Disney+, ESPN+, Hulu, NYT, Paramount+, Peacock, WSJ, YouTube Premium, YouTube TV — $25/month",val:25,per:"monthly",cat:"entertainment"},{nm:"$15/mo Uber Cash",dc:"$15/month plus $20 bonus in December = $200/yr total for Uber rides and Uber Eats in the U.S.",val:15,per:"monthly",cat:"transport"},{nm:"$120 Uber One Membership",dc:"Annual statement credit for Uber One auto-renewing membership (enrollment required)",val:120,per:"annual",cat:"transport"},{nm:"$50 Saks Credit H1",dc:"Saks Fifth Avenue or saks.com — Jan to Jun (enrollment required)",val:50,per:"semi-annual",semi:"H1",cat:"shopping"},{nm:"$50 Saks Credit H2",dc:"Saks Fifth Avenue or saks.com — Jul to Dec (enrollment required)",val:50,per:"semi-annual",semi:"H2",cat:"shopping"},{nm:"$200 Oura Ring Credit",dc:"Annual statement credit for Oura Ring purchase at ouraring.com (enrollment required)",val:200,per:"annual",cat:"wellness"},{nm:"$300 Equinox Credit",dc:"Annual credit for Equinox+ digital or Equinox club membership (enrollment required)",val:300,per:"annual",cat:"wellness"},{nm:"$209 CLEAR Plus Credit",dc:"Annual statement credit for CLEAR+ membership (enrollment required)",val:209,per:"annual",cat:"travel"},{nm:"$12.95/mo Walmart+ Credit",dc:"Monthly statement credit covering full Walmart+ membership cost (includes Paramount+ with Ads)",val:13,per:"monthly",cat:"other"},{nm:"Global Entry TSA Pre",dc:"Up to $120 application fee credit every 4.5 years",val:120,per:"annual",cat:"travel"},{nm:"Global Lounge Collection",dc:"Unlimited Centurion Lounges, 10 Delta Sky Club visits/yr, Priority Pass Select, 1550+ lounges worldwide",val:0,per:"ongoing",cat:"travel"},{nm:"Marriott Gold and Hilton Gold",dc:"Complimentary Marriott Bonvoy Gold and Hilton Honors Gold elite status (enrollment required)",val:0,per:"ongoing",cat:"travel"}]},
+{n:"Amex Gold",sh:"Gold",net:"American Express",fee:325,gr:"linear-gradient(135deg,#6A4200 0%,#C18810 50%,#6A4200 100%)",ac:"#FFD700",tc:"#FFF9E0",b:[{nm:"$10/mo Dining Credit",dc:"Monthly credit at Grubhub, The Cheesecake Factory, Goldbelly, Wine.com, and Five Guys (enrollment required)",val:10,per:"monthly",cat:"dining"},{nm:"$10/mo Uber Cash",dc:"Monthly Uber Cash for Uber rides and Uber Eats in U.S. — add Gold Card to Uber account",val:10,per:"monthly",cat:"transport"},{nm:"$7/mo Dunkin Credit",dc:"Monthly statement credit at U.S. Dunkin locations (enrollment required)",val:7,per:"monthly",cat:"dining"},{nm:"$50 Resy Credit H1",dc:"Up to $50 at U.S. Resy-affiliated restaurants — Jan to Jun (enrollment required)",val:50,per:"semi-annual",semi:"H1",cat:"dining"},{nm:"$50 Resy Credit H2",dc:"Up to $50 at U.S. Resy-affiliated restaurants — Jul to Dec (enrollment required)",val:50,per:"semi-annual",semi:"H2",cat:"dining"},{nm:"$100 Hotel Collection Credit",dc:"$100 on-property credit per eligible 2+ night stay at The Hotel Collection via AmexTravel.com",val:100,per:"annual",cat:"travel"}]},
+{n:"Amex Marriott Brilliant",sh:"Brilliant",net:"American Express",fee:650,gr:"linear-gradient(135deg,#2C0709 0%,#6B1522 55%,#2C0709 100%)",ac:"#D4AF37",tc:"#F5E6EA",b:[{nm:"$25/mo Dining Credit",dc:"Monthly statement credit at restaurants worldwide (enrollment required)",val:25,per:"monthly",cat:"dining"},{nm:"Annual Free Night Award",dc:"Annual free night certificate up to 85000 Marriott Bonvoy points each card anniversary",val:0,per:"annual",cat:"travel"},{nm:"$100 Luxury Property Credit",dc:"$100 on-property credit on 2+ night paid stays at St. Regis or Ritz-Carlton via Luxury Card Rate",val:100,per:"annual",cat:"travel"},{nm:"Priority Pass Select",dc:"Up to 6 complimentary Priority Pass lounge visits per year",val:0,per:"annual",cat:"travel"},{nm:"25 Elite Night Credits",dc:"Annual Marriott Bonvoy elite night credits toward status tiers",val:0,per:"annual",cat:"travel"},{nm:"Platinum Elite Status",dc:"Automatic Marriott Bonvoy Platinum Elite — breakfast, suite upgrades, lounge access",val:0,per:"ongoing",cat:"travel"},{nm:"Global Entry TSA Pre",dc:"Up to $100 application fee credit every 4.5 years",val:100,per:"annual",cat:"travel"}]},
+{n:"Amex Marriott Bonvoy Legacy",sh:"Bonvoy Amex",net:"American Express",fee:95,gr:"linear-gradient(135deg,#1A0007 0%,#4D0015 55%,#1A0007 100%)",ac:"#C0995A",tc:"#F5EED8",b:[{nm:"Silver Elite Status",dc:"Automatic Marriott Bonvoy Silver Elite — 10% bonus points on eligible paid stays",val:0,per:"ongoing",cat:"travel"},{nm:"15 Elite Night Credits",dc:"Annual Marriott Bonvoy elite night credits toward higher status tiers",val:0,per:"annual",cat:"travel"},{nm:"6x Points at Marriott",dc:"Earn 6 Marriott Bonvoy points per $1 at participating Marriott properties",val:0,per:"ongoing",cat:"travel"},{nm:"Free In-Room WiFi",dc:"Complimentary premium in-room internet at participating Marriott properties",val:0,per:"ongoing",cat:"travel"}]},
+{n:"Amex Hilton Honors",sh:"Hilton Honors",net:"American Express",fee:0,gr:"linear-gradient(135deg,#001A33 0%,#003D6E 100%)",ac:"#5DADE2",tc:"#D6EAF8",b:[{nm:"Silver Elite Status",dc:"Automatic Hilton Honors Silver — 20% bonus Base Points on stays, free Wi-Fi",val:0,per:"ongoing",cat:"travel"},{nm:"7x Points at Hilton",dc:"7x Hilton Honors points on eligible Hilton hotel purchases",val:0,per:"ongoing",cat:"travel"},{nm:"5x on Dining Grocery Gas",dc:"5x points at U.S. restaurants, supermarkets, and gas stations",val:0,per:"ongoing",cat:"dining"},{nm:"3x on Everything Else",dc:"3x Hilton Honors points on all other eligible purchases",val:0,per:"ongoing",cat:"other"}]},
+{n:"Amex Hilton Surpass",sh:"Hilton Surpass",net:"American Express",fee:150,gr:"linear-gradient(135deg,#001033 0%,#002D6E 100%)",ac:"#3D9BE9",tc:"#D0E8FA",b:[{nm:"$50 Hilton Credit",dc:"Up to $50 per quarter for eligible Hilton portfolio purchases (bookings and room charges). Resets quarterly.",val:50,per:"quarterly",cat:"travel"},{nm:"Gold Elite Status",dc:"Automatic Hilton Honors Gold — 80% bonus Base Points, 5th night free on reward stays",val:0,per:"ongoing",cat:"travel"},{nm:"Diamond at 40k Spend",dc:"Upgrade to Diamond status through end of next calendar year after $40000 in purchases",val:0,per:"annual",cat:"travel"},{nm:"Free Night at 15k Spend",dc:"One free night reward after $15000 in purchases in a calendar year",val:0,per:"annual",cat:"travel"},{nm:"National Car Rental Executive",dc:"Complimentary National Car Rental Emerald Club Executive status (enrollment required)",val:0,per:"ongoing",cat:"transport"}]},
+{n:"Amex Hilton Aspire",sh:"Hilton Aspire",net:"American Express",fee:550,gr:"linear-gradient(135deg,#000D1A 0%,#001F40 55%,#000D1A 100%)",ac:"#1E88C8",tc:"#C8E6FA",b:[{nm:"$200 Hilton Resort Credit H1",dc:"Statement credit for eligible purchases at participating Hilton resorts — Jan to Jun",val:200,per:"semi-annual",semi:"H1",cat:"travel"},{nm:"$200 Hilton Resort Credit H2",dc:"Statement credit for eligible purchases at participating Hilton resorts — Jul to Dec",val:200,per:"semi-annual",semi:"H2",cat:"travel"},{nm:"$50 Flight Credit",dc:"Up to $50 per quarter for flights from airlines or AmexTravel.com. Resets quarterly.",val:50,per:"quarterly",cat:"travel"},{nm:"$209 CLEAR Plus Credit",dc:"Annual statement credit for CLEAR+ membership (enrollment required, auto-renewal)",val:209,per:"annual",cat:"travel"},{nm:"Annual Free Night Reward",dc:"One free night award every card anniversary — valid at any Hilton property worldwide",val:0,per:"annual",cat:"travel"},{nm:"2nd Free Night at 30k Spend",dc:"Second free night reward after $30000 in purchases in a calendar year",val:0,per:"annual",cat:"travel"},{nm:"3rd Free Night at 60k Spend",dc:"Third free night reward after $60000 in purchases in a calendar year",val:0,per:"annual",cat:"travel"},{nm:"$100 Waldorf Conrad Credit",dc:"$100 property credit on 2+ night paid stays at Waldorf Astoria or Conrad hotels",val:100,per:"annual",cat:"travel"},{nm:"Diamond Elite Status",dc:"Automatic Hilton Honors Diamond — free breakfast/daily food credit, suite upgrades, executive lounge",val:0,per:"ongoing",cat:"travel"},{nm:"National Car Rental Executive",dc:"Complimentary National Car Rental Emerald Club Executive status (enrollment required)",val:0,per:"ongoing",cat:"transport"},{nm:"Cell Phone Protection",dc:"Up to $800 per claim for damage or theft when you pay phone bill with card ($50 deductible, 2 claims/yr)",val:0,per:"ongoing",cat:"other"}]},
+{n:"BOA Atmos Ascent",sh:"Atmos Ascent",net:"Visa Signature",fee:95,gr:"linear-gradient(135deg,#003050 0%,#0066A3 100%)",ac:"#5EB9E0",tc:"#D6F0FA",b:[{nm:"Annual 99 Companion Fare",dc:"$99 companion fare after $6000 spend in prior anniversary year on Alaska and Hawaiian flights",val:0,per:"annual",cat:"travel"},{nm:"Free First Checked Bag",dc:"First bag free for cardholder and up to 6 companions on same reservation",val:0,per:"ongoing",cat:"travel"},{nm:"Priority Boarding",dc:"Early group boarding on Alaska Airlines flights when purchased with card",val:0,per:"ongoing",cat:"travel"},{nm:"$100 Alaska Lounge+ Discount",dc:"$100 off annual Alaska Lounge+ membership when paid with this card",val:100,per:"annual",cat:"travel"},{nm:"20% Inflight Purchase Back",dc:"20% back as statement credit on all Alaska Airlines inflight purchases",val:0,per:"ongoing",cat:"travel"}]},
+{n:"BOA Atmos Summit",sh:"Atmos Summit",net:"Visa Infinite",fee:395,gr:"linear-gradient(135deg,#001A30 0%,#004D80 55%,#001A30 100%)",ac:"#7CD4F5",tc:"#E0F5FF",b:[{nm:"Annual Global Companion Award",dc:"Free companion ticket 25k Atmos pts in any class on Alaska, Hawaiian or airline partners",val:0,per:"annual",cat:"travel"},{nm:"Alaska Lounge Passes",dc:"Complimentary Alaska Lounge passes annually",val:0,per:"annual",cat:"travel"},{nm:"Free First Checked Bag",dc:"First bag free for cardholder and up to 6 companions on Alaska and Hawaiian flights",val:0,per:"ongoing",cat:"travel"},{nm:"$50 Instant Flight Delay Credit",dc:"$50 voucher auto-issued for same-day 2hr+ Alaska flight delay or cancellation",val:50,per:"ongoing",cat:"travel"},{nm:"10000 Annual Status Points",dc:"Annual 10000 Atmos status points toward Atmos Silver elite status",val:0,per:"annual",cat:"travel"}]},
+{n:"Capital One Venture X",sh:"Venture X",net:"Visa Infinite",fee:395,gr:"linear-gradient(135deg,#0A0A1A 0%,#1A1A4E 55%,#0A0A1A 100%)",ac:"#D4AF37",tc:"#F0E8C8",b:[{nm:"$300 Annual Travel Credit",dc:"Annual credit for bookings via Capital One Travel portal — auto-applied",val:300,per:"annual",cat:"travel"},{nm:"10000 Anniversary Miles",dc:"10000 bonus miles deposited each account anniversary year",val:0,per:"annual",cat:"travel"},{nm:"Global Entry TSA Pre",dc:"Up to $100 application fee credit",val:100,per:"annual",cat:"travel"},{nm:"Priority Pass and C1 Lounges",dc:"Unlimited Priority Pass and Capital One Lounge access with up to 2 guests",val:0,per:"ongoing",cat:"travel"}]},
+{n:"Capital One Venture",sh:"Venture",net:"Visa Signature",fee:95,gr:"linear-gradient(135deg,#0D0D24 0%,#1F1F5C 100%)",ac:"#8FA8D8",tc:"#D0DCEF",b:[{nm:"Global Entry TSA Pre",dc:"Up to $100 application fee credit",val:100,per:"annual",cat:"travel"},{nm:"2x Miles on Everything",dc:"Unlimited 2x miles on every purchase everywhere",val:0,per:"ongoing",cat:"travel"}]},
+{n:"Bilt Blue",sh:"Bilt Blue",net:"Mastercard",fee:0,gr:"linear-gradient(135deg,#0A0A1A 0%,#1A2040 100%)",ac:"#6A9FD4",tc:"#D6E8FA",b:[{nm:"Rent and Mortgage Rewards",dc:"Earn Bilt points on rent and mortgage payments with no transaction fee through Bilt",val:0,per:"ongoing",cat:"other"},{nm:"4% Bilt Cash on Everyday Spend",dc:"4% back in Bilt Cash on everyday purchases — redeemable for hotels, rideshare, dining and more",val:0,per:"ongoing",cat:"other"},{nm:"1x Points on All Purchases",dc:"1x Bilt points on all everyday purchases",val:0,per:"ongoing",cat:"other"},{nm:"Free Rent Credit Reporting",dc:"Opt-in free reporting of on-time rent payments to major credit bureaus",val:0,per:"ongoing",cat:"other"}]},
+{n:"Bilt Obsidian",sh:"Bilt Obsidian",net:"Mastercard",fee:95,gr:"linear-gradient(135deg,#0D0D0D 0%,#2A2A2A 100%)",ac:"#9FA8B0",tc:"#E8ECEF",b:[{nm:"$100 Hotel Credit H1",dc:"$100 Bilt Travel Portal hotel credit — Jan to Jun (min 2-night stay, book via bilt.com)",val:100,per:"semi-annual",semi:"H1",cat:"travel"},{nm:"$100 Hotel Credit H2",dc:"$100 Bilt Travel Portal hotel credit — Jul to Dec (min 2-night stay, book via bilt.com)",val:100,per:"semi-annual",semi:"H2",cat:"travel"},{nm:"Rent and Mortgage Rewards",dc:"Earn Bilt points on rent and mortgage with no transaction fee",val:0,per:"ongoing",cat:"other"},{nm:"3x Dining or Grocery",dc:"Choose dining or grocery as 3x earning category for the year (grocery capped $25k/yr)",val:0,per:"ongoing",cat:"dining"},{nm:"2x on Travel",dc:"2x Bilt points on all travel purchases",val:0,per:"ongoing",cat:"travel"},{nm:"4% Bilt Cash on Everyday Spend",dc:"4% back in Bilt Cash on everyday purchases",val:0,per:"ongoing",cat:"other"}]},
+{n:"Bilt Palladium",sh:"Bilt Palladium",net:"Mastercard",fee:495,gr:"linear-gradient(135deg,#1A1008 0%,#3D2A15 100%)",ac:"#C5A876",tc:"#F5EDD8",b:[{nm:"$200 Hotel Credit H1",dc:"$200 Bilt Travel Portal hotel credit — Jan to Jun (min 2-night stay, book via bilt.com)",val:200,per:"semi-annual",semi:"H1",cat:"travel"},{nm:"$200 Hotel Credit H2",dc:"$200 Bilt Travel Portal hotel credit — Jul to Dec (min 2-night stay, book via bilt.com)",val:200,per:"semi-annual",semi:"H2",cat:"travel"},{nm:"$200 Annual Bilt Cash",dc:"$200 Bilt Cash credited annually — redeem for hotels, restaurants, rideshare, or housing points",val:200,per:"annual",cat:"other"},{nm:"Priority Pass",dc:"Unlimited Priority Pass airport lounge access worldwide",val:0,per:"ongoing",cat:"travel"},{nm:"2x Points on All Everyday Spend",dc:"2x Bilt points on all everyday purchases excluding rent/mortgage",val:0,per:"ongoing",cat:"other"},{nm:"Rent and Mortgage Rewards",dc:"Earn Bilt points on rent and mortgage with no transaction fee",val:0,per:"ongoing",cat:"other"}]},
+{n:"Bilt Legacy Mastercard",sh:"Bilt Legacy",net:"Mastercard",fee:0,gr:"linear-gradient(135deg,#0A0A0A 0%,#2A2A2A 100%)",ac:"#A0A0A0",tc:"#EBEBEB",b:[{nm:"Rent Rewards",dc:"Earn points on rent with no transaction fee (Wells Fargo issued, no longer available to new applicants)",val:0,per:"ongoing",cat:"other"},{nm:"$5/mo Lyft Credit",dc:"Monthly $5 Lyft credit",val:5,per:"monthly",cat:"transport"}]},
+{n:"Citi Prestige",sh:"Prestige",net:"Mastercard",fee:495,gr:"linear-gradient(135deg,#001A33 0%,#003D7A 100%)",ac:"#5B9BD5",tc:"#D6E8FA",b:[{nm:"$250 Annual Travel Credit",dc:"Auto-applied to airline, hotel, and cruise purchases",val:250,per:"annual",cat:"travel"},{nm:"4th Night Free",dc:"Fourth night free on hotel stays via Citi concierge up to 2x per year",val:0,per:"annual",cat:"travel"},{nm:"Global Entry TSA Pre",dc:"Up to $100 application fee credit",val:100,per:"annual",cat:"travel"},{nm:"Priority Pass",dc:"Unlimited Priority Pass Select airport lounge access",val:0,per:"ongoing",cat:"travel"}]},
+{n:"US Bank Altitude Reserve",sh:"Altitude Reserve",net:"Visa Infinite",fee:400,gr:"linear-gradient(135deg,#003366 0%,#004C99 100%)",ac:"#7BB8F0",tc:"#D6EAFF",b:[{nm:"$325 Annual Travel Credit",dc:"Automatic credit on travel and mobile wallet purchases",val:325,per:"annual",cat:"travel"},{nm:"Priority Pass",dc:"12 complimentary Priority Pass lounge visits per year",val:0,per:"annual",cat:"travel"}]},
+{n:"Wells Fargo Autograph Journey",sh:"Autograph",net:"Visa Signature",fee:95,gr:"linear-gradient(135deg,#8B0000 0%,#A52A2A 100%)",ac:"#F4C842",tc:"#FEF8DC",b:[{nm:"$50 Annual Airline Credit",dc:"Annual statement credit for airline purchases",val:50,per:"annual",cat:"travel"},{nm:"$50 Annual Hotel Credit",dc:"Annual statement credit for hotel purchases",val:50,per:"annual",cat:"travel"}]},
+{n:"Bank of America Premium Rewards",sh:"BofA Premium",net:"Visa Signature",fee:95,gr:"linear-gradient(135deg,#8B0000 0%,#C0392B 100%)",ac:"#F5A623",tc:"#FEF5E7",b:[{nm:"$100 Airline Incidental Credit",dc:"Annual statement credit for airline incidental fee purchases",val:100,per:"annual",cat:"travel"},{nm:"$100 Global Entry Credit",dc:"Up to $100 Global Entry or TSA Pre fee credit every 4 years",val:100,per:"annual",cat:"travel"}]},
+{n:"Discover it Cash Back",sh:"Discover it",net:"Discover",fee:0,gr:"linear-gradient(135deg,#C2400A 0%,#EA580C 100%)",ac:"#FCD34D",tc:"#FFF9E0",b:[{nm:"Cashback Match Year 1",dc:"Discover automatically matches all cash back earned in your first year",val:0,per:"annual",cat:"other"},{nm:"5% Rotating Categories",dc:"5% cash back on up to $1500 in rotating quarterly categories — activate each quarter on Discover app",val:0,per:"quarterly",cat:"other"}]},
+{n:"Apple Card",sh:"Apple Card",net:"Mastercard",fee:0,gr:"linear-gradient(135deg,#1C1C1E 0%,#3A3A3C 100%)",ac:"#E0E0E0",tc:"#F5F5F7",b:[{nm:"3% Daily Cash at Apple",dc:"3% Daily Cash on App Store, Apple.com, and Apple services purchases",val:0,per:"ongoing",cat:"shopping"},{nm:"2% with Apple Pay",dc:"2% Daily Cash on all Apple Pay purchases",val:0,per:"ongoing",cat:"other"},{nm:"1% on Physical Card",dc:"1% Daily Cash when using physical card without Apple Pay",val:0,per:"ongoing",cat:"other"}]}
+]
+
+const GP=[
+  {gr:"linear-gradient(135deg,#0A2342 0%,#1A5276 100%)",ac:"#5DADE2",tc:"#D6EAF8"},
+  {gr:"linear-gradient(135deg,#0B3D0B 0%,#1E8449 100%)",ac:"#58D68D",tc:"#D5F5E3"},
+  {gr:"linear-gradient(135deg,#2C0033 0%,#6A0572 100%)",ac:"#C39BD3",tc:"#F4ECF7"},
+  {gr:"linear-gradient(135deg,#4A0A00 0%,#B03A00 100%)",ac:"#F39C12",tc:"#FEF9E7"},
+  {gr:"linear-gradient(135deg,#1C2833 0%,#34495E 100%)",ac:"#85929E",tc:"#EAF2FF"},
+  {gr:"linear-gradient(135deg,#3D0017 0%,#922B47 100%)",ac:"#F1948A",tc:"#FDEDEC"}];
+const BG="#07080F",SF="#0D1222",BD="rgba(255,255,255,0.07)";
+const TX="#E0E4EE",MT="#5A6878",SC="#3DBA7E",WN="#F59E0B";
+const IS={background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"11px 13px",color:TX,fontSize:15,width:"100%",outline:"none"};
+const LS={fontSize:11,color:MT,textTransform:"uppercase",letterSpacing:"0.08em",display:"block",marginBottom:4};
+
+function mkCard(t){return{...t,id:uid(),benefits:t.b.map(b=>({...b,id:uid(),used:false,usedCount:0,lastReset:now()}))}}
+function mkVault(names){return names.map(n=>{const t=LIB.find(c=>c.n===n);return t?mkCard(t):null}).filter(Boolean)}
+
+const DA=[
+  {id:"me",name:"My Account",emoji:"👤",cards:mkVault(["Chase Sapphire Reserve","Amex Platinum","Amex Gold","Amex Marriott Brilliant"])},
+  {id:"partner",name:"Partner",emoji:"👥",cards:[]}];
+
+function Modal({children,onClose}){
+  return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:SF,border:"1px solid "+BD,borderRadius:"20px 20px 0 0",padding:"24px 20px",paddingBottom:"calc(28px + env(safe-area-inset-bottom))",width:"100%",maxWidth:520,maxHeight:"90vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+      {children}
+    </div>
+  </div>}
+
+function RoiPanel({card,onEditFee}){
+  const fee=card.fee||0;const fd=card.feeDate?new Date(card.feeDate):null;
+  const used=card.benefits.filter(b=>b.val>0).reduce((s,b)=>s+b.val*((b.usedCount||0)+(b.used?1:0)),0);
+  const total=card.benefits.filter(b=>b.val>0).reduce((s,b)=>s+b.val,0);
+  const net=used-fee;const fdys=fd?dLeft(fd):null;const fc=fdys!=null&&fdys>=0&&fdys<=60;
+  const pct=total>0?Math.min(100,Math.round(used/total*100)):0;
+  const rat=fee>0?Math.min(100,Math.round(used/fee*100)):100;
+  let ver,vc,vb;
+  if(fee===0){ver="No annual fee";vc=SC;vb="rgba(61,186,126,0.08)";}
+  else if(rat>=100){ver="Worth it ✓";vc=SC;vb="rgba(61,186,126,0.08)";}
+  else if(rat>=60){ver="Getting there";vc=WN;vb="rgba(245,158,11,0.08)";}
+  else{ver="Behind on value";vc="#EF4444";vb="rgba(239,68,68,0.08)";}
+  return <div style={{marginBottom:16}}>
+    {fc&&<div className="ap" style={{display:"flex",alignItems:"center",gap:8,background:"rgba(245,158,11,0.07)",border:"1px solid rgba(245,158,11,0.25)",borderRadius:10,padding:"9px 14px",marginBottom:10,flexWrap:"wrap"}}>
+      <span>⏰</span><span style={{fontSize:12,color:WN,fontWeight:600}}>Annual fee due in {fdys===0?"today":fdys+" days"}</span>
+      <span style={{fontSize:11,color:MT}}>Use your benefits before paying ${fee}!</span>
+    </div>}
+    <div style={{background:"rgba(255,255,255,0.025)",border:"1px solid "+BD,borderRadius:14,padding:"14px 16px"}}>
+      <div style={{display:"flex",marginBottom:14}}>
+        {[{l:"Benefits Used",v:"$"+used,s:"of $"+total+" potential/period",c:card.ac||TX},{l:"Annual Fee",v:fee===0?"Free":"$"+fee,s:fd?("Due "+fd.toLocaleDateString("en-US",{month:"short",day:"numeric"})):null,c:fee===0?SC:WN,ck:true},{l:"Net Savings",v:(net>=0?"+":"")+"$"+net,s:net>=0?"You're ahead!":"Use more benefits",c:net>=0?SC:"#EF4444"}].map((s,i)=>(
+          <div key={i} onClick={s.ck?onEditFee:null} style={{flex:1,padding:"4px 10px",borderRight:i<2?"1px solid "+BD:"none",cursor:s.ck?"pointer":"default"}}>
+            <div style={{fontSize:9,color:MT,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3}}>{s.l}{s.ck&&<span style={{opacity:0.4}}> ✎</span>}</div>
+            <div style={{fontSize:17,fontWeight:700,color:s.c,lineHeight:1}}>{s.v}</div>
+            {s.s&&<div style={{fontSize:10,color:MT,marginTop:2}}>{s.s}</div>}
+          </div>
+        ))}
+      </div>
+      <div style={{marginBottom:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+          <span style={{fontSize:10,color:MT}}>Benefit redemption progress</span>
+          <span style={{fontSize:10,fontWeight:600,color:card.ac||TX}}>{pct}%</span>
+        </div>
+        <div style={{height:6,background:"rgba(255,255,255,0.07)",borderRadius:3,overflow:"hidden",position:"relative"}}>
+          {fee>0&&total>0&&<div style={{position:"absolute",left:Math.min(99,Math.round(fee/total*100))+"%",top:0,bottom:0,width:2,background:"rgba(245,158,11,0.8)",zIndex:2}}/>}
+          <div style={{height:"100%",width:pct+"%",background:"linear-gradient(90deg,"+(card.ac||SC)+"88,"+(card.ac||SC)+")",borderRadius:3,transition:"width 0.5s"}}/>
+        </div>
+        {fee>0&&total>0&&used<fee&&<div style={{fontSize:9,color:MT,marginTop:4}}>Orange line = break-even · Need ${fee-used} more to cover your fee</div>}
+      </div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+        <div style={{background:vb,borderRadius:20,padding:"4px 14px",fontSize:12,fontWeight:600,color:vc}}>{ver}</div>
+        <button onClick={onEditFee} style={{background:"none",border:"1px solid "+BD,color:MT,borderRadius:8,padding:"5px 13px",fontSize:12,cursor:"pointer"}}>{fee===0&&!fd?"Set annual fee":"Edit fee / due date"}</button>
+      </div>
+    </div>
+  </div>}
+
+function EditFeeModal({card,onSave,onClose}){
+  const [fee,setFee]=useState(String(card.fee||""));
+  const [date,setDate]=useState(card.feeDate?card.feeDate.slice(0,10):"");
+  return <Modal onClose={onClose}>
+    <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:600,color:"#F0EBD8",marginBottom:4}}>Annual Fee Settings</div>
+    <div style={{fontSize:12,color:MT,marginBottom:20}}>{card.n}</div>
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div><label style={LS}>Annual Fee ($)</label><input style={IS} type="number" min="0" value={fee} onChange={e=>setFee(e.target.value)} placeholder="e.g. 550"/></div>
+      <div><label style={LS}>Next Fee Due Date</label><input style={{...IS,colorScheme:"dark"}} type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
+    </div>
+    <div style={{display:"flex",gap:10,marginTop:22}}>
+      <button onClick={onClose} style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid "+BD,color:MT,borderRadius:8,padding:"13px",fontSize:15,cursor:"pointer"}}>Cancel</button>
+      <button onClick={()=>onSave({fee:Math.max(0,Number(fee)||0),feeDate:date||null})} style={{flex:1,background:card.ac||"#C9A84C",border:"none",color:"#000",borderRadius:8,padding:"13px",fontSize:15,fontWeight:600,cursor:"pointer"}}>Save</button>
+    </div>
+  </Modal>}
+
+function AddCardModal({onAdd,onClose}){
+  const [q,setQ]=useState("");const [mode,setMode]=useState("search");const [matches,setMatches]=useState([]);
+  const [picked,setPicked]=useState(null);const [nm,setNm]=useState("");const [sh,setSh]=useState("");
+  const [net,setNet]=useState("Other");const [gi,setGi]=useState(0);const ref=useRef();
+  useEffect(()=>{setTimeout(()=>ref.current&&ref.current.focus(),150)},[]);
+  const search=v=>{setQ(v);setPicked(null);if(v.length<2){setMatches([]);return}
+    const lv=v.toLowerCase();setMatches(LIB.filter(c=>c.n.toLowerCase().includes(lv)||c.sh.toLowerCase().includes(lv)).slice(0,7))};
+  const doAdd=()=>{
+    if(picked)onAdd(mkCard(picked));
+    else{if(!nm.trim())return;const p=GP[gi];onAdd({n:nm.trim(),sh:(sh||nm).trim(),net,gr:p.gr,ac:p.ac,tc:p.tc,id:uid(),benefits:[],fee:0,b:[]})}};
+  return <Modal onClose={onClose}>
+    <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,fontWeight:600,color:"#F0EBD8",marginBottom:4}}>Add Card</div>
+    <div style={{fontSize:12,color:MT,marginBottom:16}}>Search library or add a custom card</div>
+    <div style={{display:"flex",background:"rgba(255,255,255,0.04)",borderRadius:8,padding:3,marginBottom:16}}>
+      {[{k:"search",l:"Search Library"},{k:"custom",l:"Custom Card"}].map(x=>(
+        <button key={x.k} onClick={()=>{setMode(x.k);setPicked(null);setQ("");setMatches([])}} style={{flex:1,background:mode===x.k?"rgba(255,255,255,0.1)":"none",border:"none",borderRadius:6,padding:"9px",cursor:"pointer",color:mode===x.k?TX:MT,fontSize:13,fontWeight:mode===x.k?600:400}}>{x.l}</button>
+      ))}
+    </div>
+    {mode==="search"?<div>
+      <div style={{position:"relative"}}>
+        <input ref={ref} style={{...IS,paddingRight:36}} value={q} onChange={e=>search(e.target.value)} placeholder="e.g. Venture X, Amex Gold, Hyatt..."/>
+        {q&&<span onClick={()=>{setQ("");setMatches([]);setPicked(null)}} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",color:MT,cursor:"pointer",fontSize:22}}>×</span>}
+      </div>
+      {matches.length>0&&<div style={{border:"1px solid "+BD,borderRadius:10,marginTop:8,overflow:"hidden"}}>
+        {matches.map((c,i)=><div key={c.n} onClick={()=>{setPicked(c);setQ(c.n);setMatches([])}}
+          style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",cursor:"pointer",background:i%2===0?"rgba(255,255,255,0.02)":"transparent",borderBottom:i<matches.length-1?"1px solid "+BD:"none"}}
+          onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.07)"}
+          onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"rgba(255,255,255,0.02)":"transparent"}>
+          <div style={{width:36,height:24,borderRadius:5,background:c.gr,flexShrink:0,border:"1px solid rgba(255,255,255,0.1)"}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:500,color:TX}}>{c.n}</div>
+            <div style={{fontSize:10,color:MT}}>{c.net} · {c.b.length} benefits · ${c.fee||0}/yr</div>
+          </div>
+          <span style={{color:MT}}>→</span>
+        </div>)}
+      </div>}
+      {picked&&<div style={{marginTop:12,background:"rgba(61,186,126,0.05)",border:"1px solid rgba(61,186,126,0.2)",borderRadius:12,padding:"12px 14px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <div style={{width:44,height:28,borderRadius:6,background:picked.gr,border:"1px solid rgba(255,255,255,0.1)"}}/>
+          <div>
+            <div style={{fontSize:13,fontWeight:600,color:TX}}>{picked.n}</div>
+            <div style={{fontSize:10,color:SC}}>{picked.b.length} benefits pre-loaded · ${picked.fee||0} annual fee</div>
+          </div>
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {picked.b.map(b=><span key={b.nm} style={{fontSize:10,background:"rgba(255,255,255,0.05)",border:"1px solid "+BD,borderRadius:20,padding:"2px 9px",color:MT}}>{b.val>0?"$"+b.val+" ":""}{b.nm}</span>)}
+        </div>
+      </div>}
+      {q.length>=2&&matches.length===0&&!picked&&<div style={{fontSize:13,color:MT,marginTop:12,textAlign:"center"}}>No match — <span style={{color:TX,cursor:"pointer",textDecoration:"underline"}} onClick={()=>setMode("custom")}>add custom card</span></div>}
+    </div>:<div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div><label style={LS}>Card Name</label><input style={IS} value={nm} onChange={e=>setNm(e.target.value)} placeholder="e.g. Capital One Venture X"/></div>
+      <div><label style={LS}>Short Name</label><input style={IS} value={sh} onChange={e=>setSh(e.target.value)} placeholder="e.g. Venture X" maxLength={14}/></div>
+      <div><label style={LS}>Network</label>
+        <select style={{...IS,cursor:"pointer"}} value={net} onChange={e=>setNet(e.target.value)}>
+          {["American Express","Visa","Visa Infinite","Visa Signature","Mastercard","Discover","Other"].map(n=><option key={n}>{n}</option>)}
+        </select>
+      </div>
+      <div><label style={LS}>Card Color</label>
+        <div style={{display:"flex",gap:9,flexWrap:"wrap",marginTop:4}}>
+          {GP.map((p,i)=><div key={i} onClick={()=>setGi(i)} style={{width:50,height:32,borderRadius:7,background:p.gr,cursor:"pointer",border:gi===i?"2px solid "+p.ac:"2px solid rgba(255,255,255,0.08)",boxShadow:gi===i?"0 0 10px "+p.ac+"50":"none"}}/>)}
+        </div>
+      </div>
+    </div>}
+    <div style={{display:"flex",gap:10,marginTop:22}}>
+      <button onClick={onClose} style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid "+BD,color:MT,borderRadius:8,padding:"13px",fontSize:15,cursor:"pointer"}}>Cancel</button>
+      <button disabled={mode==="search"?!picked:!nm.trim()} onClick={doAdd} style={{flex:1,background:picked?SC:GP[gi]&&GP[gi].ac,border:"none",color:"#000",borderRadius:8,padding:"13px",fontSize:15,fontWeight:600,cursor:"pointer",opacity:(mode==="search"?!!picked:!!nm.trim())?1:0.35}}>
+        {picked?"Add "+picked.sh:"Add Card"}
+      </button>
+    </div>
+  </Modal>}
+
+function AddBenModal({acc,cid,onAdd,onClose}){
+  const [nm,setNm]=useState("");const [dc,setDc]=useState("");const [val,setVal]=useState("0");
+  const [per,setPer]=useState("monthly");const [sm,setSm]=useState("H1");const [cat,setCat]=useState("other");
+  return <Modal onClose={onClose}>
+    <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,fontWeight:600,color:"#F0EBD8",marginBottom:20}}>Add Benefit</div>
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div><label style={LS}>Benefit Name</label><input style={IS} value={nm} onChange={e=>setNm(e.target.value)} placeholder="e.g. $15/mo Streaming Credit"/></div>
+      <div><label style={LS}>Description</label><input style={IS} value={dc} onChange={e=>setDc(e.target.value)} placeholder="Where and how to redeem"/></div>
+      <div style={{display:"flex",gap:10}}>
+        <div style={{flex:1}}><label style={LS}>Value ($)</label><input style={IS} type="number" min="0" value={val} onChange={e=>setVal(e.target.value)}/></div>
+        <div style={{flex:1}}><label style={LS}>Period</label>
+          <select style={{...IS,cursor:"pointer"}} value={per} onChange={e=>setPer(e.target.value)}>
+            <option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option>
+            <option value="semi-annual">Semi-Annual</option>
+            <option value="annual">Annual</option>
+            <option value="ongoing">Ongoing</option>
+          </select>
+        </div>
+      </div>
+      {per==="semi-annual"&&<div><label style={LS}>Half of Year</label>
+        <select style={{...IS,cursor:"pointer"}} value={sm} onChange={e=>setSm(e.target.value)}>
+          <option value="H1">First Half Jan-Jun</option>
+          <option value="H2">Second Half Jul-Dec</option>
+        </select>
+      </div>}
+      <div><label style={LS}>Category</label>
+        <select style={{...IS,cursor:"pointer"}} value={cat} onChange={e=>setCat(e.target.value)}>
+          {["travel","dining","transport","entertainment","shopping","wellness","other"].map(c=><option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+        </select>
+      </div>
+    </div>
+    <div style={{display:"flex",gap:10,marginTop:22}}>
+      <button onClick={onClose} style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid "+BD,color:MT,borderRadius:8,padding:"13px",fontSize:15,cursor:"pointer"}}>Cancel</button>
+      <button disabled={!nm.trim()} onClick={()=>{if(!nm.trim())return;onAdd(cid,{nm:nm.trim(),dc:dc.trim(),val:Math.max(0,Number(val)||0),per,semi:per==="semi-annual"?sm:undefined,cat})}} style={{flex:1,background:acc||"#C9A84C",border:"none",color:"#000",borderRadius:8,padding:"13px",fontSize:15,fontWeight:600,cursor:"pointer",opacity:nm.trim()?1:0.4}}>Add Benefit</button>
+    </div>
+  </Modal>}
+
+const EM=["👤","👥","👨","👩","🧑","🌟","💼","🎯","🦁","🐼","🌸","⚡"];
+function ManageAccModal({accs,onRen,onAdd,onRem,onClose}){
+  const [eid,setEid]=useState(null);const [enm,setEnm]=useState("");const [eem,setEem]=useState("👤");
+  const [nnm,setNnm]=useState("");const [nem,setNem]=useState("👥");
+  return <Modal onClose={onClose}>
+    <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,fontWeight:600,color:"#F0EBD8",marginBottom:20}}>Manage Accounts</div>
+    <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:24}}>
+      {accs.map(a=><div key={a.id}>
+        {eid===a.id?<div style={{background:"rgba(255,255,255,0.04)",borderRadius:12,padding:"12px 14px",border:"1px solid "+BD}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>{EM.map(e=><span key={e} onClick={()=>setEem(e)} style={{fontSize:22,cursor:"pointer",padding:"5px 7px",borderRadius:6,background:eem===e?"rgba(255,255,255,0.12)":"transparent"}}>{e}</span>)}</div>
+          <input style={{...IS,marginBottom:10}} value={enm} onChange={e=>setEnm(e.target.value)} placeholder="Account name"/>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setEid(null)} style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid "+BD,color:MT,borderRadius:8,padding:"10px",fontSize:14,cursor:"pointer"}}>Cancel</button>
+            <button onClick={()=>{onRen(a.id,enm.trim()||a.name,eem);setEid(null)}} style={{flex:1,background:SC,border:"none",color:"#000",borderRadius:8,padding:"10px",fontSize:14,fontWeight:600,cursor:"pointer"}}>Save</button>
+          </div>
+        </div>:<div style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,0.03)",borderRadius:10,padding:"12px 14px",border:"1px solid "+BD}}>
+          <span style={{fontSize:24}}>{a.emoji}</span>
+          <div style={{flex:1}}><div style={{fontSize:14,fontWeight:500,color:TX}}>{a.name}</div><div style={{fontSize:11,color:MT}}>{a.cards.length} cards</div></div>
+          <button onClick={()=>{setEid(a.id);setEnm(a.name);setEem(a.emoji)}} style={{background:"rgba(255,255,255,0.05)",border:"1px solid "+BD,color:MT,borderRadius:7,padding:"6px 12px",fontSize:12,cursor:"pointer"}}>Edit</button>
+          {accs.length>1&&<button onClick={()=>{if(window.confirm("Remove "+a.name+"?"))onRem(a.id)}} style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",color:"#EF4444",borderRadius:7,padding:"6px 10px",fontSize:12,cursor:"pointer"}}>✕</button>}
+        </div>}
+      </div>)}
+    </div>
+    <div style={{borderTop:"1px solid "+BD,paddingTop:18}}>
+      <div style={{fontSize:11,color:MT,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Add Account</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>{EM.map(e=><span key={e} onClick={()=>setNem(e)} style={{fontSize:22,cursor:"pointer",padding:"5px 7px",borderRadius:6,background:nem===e?"rgba(255,255,255,0.12)":"transparent"}}>{e}</span>)}</div>
+      <input style={{...IS,marginBottom:10}} value={nnm} onChange={e=>setNnm(e.target.value)} placeholder="e.g. Partner, Spouse, Business..."/>
+      <button disabled={!nnm.trim()} onClick={()=>{if(!nnm.trim())return;onAdd(nnm.trim(),nem);setNnm("")}} style={{width:"100%",background:nnm.trim()?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.03)",border:"1px solid "+BD,color:nnm.trim()?TX:MT,borderRadius:8,padding:"13px",fontSize:15,fontWeight:500,cursor:"pointer"}}>+ Create Account</button>
+    </div>
+    <button onClick={onClose} style={{width:"100%",background:"none",border:"1px solid "+BD,color:MT,borderRadius:8,padding:"13px",fontSize:15,cursor:"pointer",marginTop:10}}>Done</button>
+  </Modal>}
+
+function App(){
+  const [accs,setAccs]=useState(null);const [aid,setAid]=useState("me");const [sel,setSel]=useState(null);
+  const [tab,setTab]=useState("all");const [loaded,setLoaded]=useState(false);
+  const [addC,setAddC]=useState(false);const [addB,setAddB]=useState(false);
+  const [manA,setManA]=useState(false);const [editF,setEditF]=useState(false);
+  const [inst,setInst]=useState(false);
+  useEffect(()=>{
+    const isPWA=window.navigator.standalone||window.matchMedia("(display-mode: standalone)").matches;
+    if(!isPWA)setInst(true);
+    const saved=ld("cv10");
+    if(saved){const r=saved.map(a=>({...a,cards:applyResets(a.cards)}));setAccs(r);setAid(r[0]&&r[0].id);setSel(r[0]&&r[0].cards[0]&&r[0].cards[0].id||null)}
+    else{const a=DA.map(a=>({...a,cards:applyResets(a.cards)}));setAccs(a);setSel(a[0]&&a[0].cards[0]&&a[0].cards[0].id||null)}
+    setLoaded(true)
+  },[]);
+  useEffect(()=>{if(loaded&&accs)sv("cv10",accs)},[accs,loaded]);
+  const upd=(id,fn)=>setAccs(p=>p.map(a=>a.id!==id?a:{...a,cards:fn(a.cards)}));
+  const acc=accs&&accs.find(a=>a.id===aid);
+  const card=acc&&(acc.cards.find(c=>c.id===sel)||acc.cards[0]);
+  const swA=id=>{const a=accs&&accs.find(x=>x.id===id);setAid(id);setSel(a&&a.cards[0]&&a.cards[0].id||null);setTab("all")};
+  const togU=(cid,bid)=>upd(aid,cs=>cs.map(c=>c.id!==cid?c:{...c,benefits:c.benefits.map(b=>b.id!==bid?b:{...b,used:!b.used})}));
+  const doAC=nc=>{upd(aid,cs=>[...cs,nc]);setSel(nc.id);setAddC(false)};
+  const doAB=(cid,ben)=>{upd(aid,cs=>cs.map(c=>c.id!==cid?c:{...c,benefits:[...c.benefits,{...ben,id:uid(),used:false,usedCount:0,lastReset:now()}]}));setAddB(false)};
+  const doRB=(cid,bid)=>upd(aid,cs=>cs.map(c=>c.id!==cid?c:{...c,benefits:c.benefits.filter(b=>b.id!==bid)}));
+  const doRC=cid=>upd(aid,cs=>{const n=cs.filter(c=>c.id!==cid);setSel(n[0]&&n[0].id||null);return n});
+  const doRA=(id,nm,em)=>setAccs(p=>p.map(a=>a.id!==id?a:{...a,name:nm,emoji:em}));
+  const doAA=(nm,em)=>{const na={id:uid(),name:nm,emoji:em,cards:[]};setAccs(p=>[...p,na])};
+  const doRemA=id=>setAccs(p=>{const n=p.filter(a=>a.id!==id);if(aid===id){setAid(n[0]&&n[0].id);setSel(n[0]&&n[0].cards[0]&&n[0].cards[0].id||null)}return n});
+  const doUM=(cid,patch)=>upd(aid,cs=>cs.map(c=>c.id!==cid?c:{...c,...patch}));
+  if(!loaded||!accs)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:BG,color:MT}}>Loading vault...</div>;
+  const allB=acc?acc.cards.flatMap(c=>c.benefits.map(b=>({...b,_card:c}))):[];
+  const alerts=allB.filter(b=>isExp(b));
+  const totV=allB.filter(b=>b.val>0).reduce((s,b)=>s+b.val,0);
+  const useV=allB.filter(b=>b.val>0).reduce((s,b)=>s+b.val*((b.usedCount||0)+(b.used?1:0)),0);
+  const visBen=card?card.benefits.filter(b=>tab==="all"||b.per===tab):[];
+  const TABS=["all","monthly","quarterly","semi-annual","annual","ongoing"];
+  return <div style={{fontFamily:"'Outfit',sans-serif",background:BG,minHeight:"100vh",color:TX,maxWidth:820,margin:"0 auto",paddingBottom:inst?110:80}}>
+    <div style={{padding:"16px 18px 12px",background:SF,borderBottom:"1px solid "+BD,position:"sticky",top:0,zIndex:100}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:12}}>
+        <div>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,fontWeight:600,color:"#F0EBD8",lineHeight:1}}>CardVault</div>
+          <div style={{fontSize:10,color:MT,marginTop:1}}>{accs.length} accounts · benefit tracker</div>
+        </div>
+        <div style={{display:"flex",gap:14,alignItems:"center"}}>
+          <div style={{textAlign:"right"}}><div style={{fontSize:9,color:MT,textTransform:"uppercase"}}>Total Value</div><div style={{fontSize:17,fontWeight:600,color:"#F0EBD8"}}>${totV.toLocaleString()}</div></div>
+          <div style={{textAlign:"right"}}><div style={{fontSize:9,color:MT,textTransform:"uppercase"}}>Claimed</div><div style={{fontSize:17,fontWeight:600,color:SC}}>${useV.toLocaleString()}</div></div>
+          {alerts.length>0&&<div className="ap" style={{background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.3)",borderRadius:10,padding:"6px 11px",textAlign:"center"}}>
+            <div style={{fontSize:15,fontWeight:700,color:WN,lineHeight:1}}>{alerts.length}</div>
+            <div style={{fontSize:9,color:WN,textTransform:"uppercase"}}>Expiring</div>
+          </div>}
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        {accs.map(a=>{const is=a.id===aid;const aA=a.cards.flatMap(c=>c.benefits).filter(b=>isExp(b)).length;
+          return <button key={a.id} className="at" onClick={()=>swA(a.id)} style={{background:is?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.03)",border:is?"1px solid rgba(255,255,255,0.22)":"1px solid "+BD,borderRadius:22,padding:"8px 15px",cursor:"pointer",color:is?TX:MT,fontSize:14,fontWeight:is?600:400,display:"flex",alignItems:"center",gap:7}}>
+            <span style={{fontSize:16}}>{a.emoji}</span><span>{a.name}</span><span style={{fontSize:10,color:is?"rgba(255,255,255,0.4)":MT}}>{a.cards.length}</span>
+            {aA>0&&<span className="ap" style={{background:WN,color:"#000",borderRadius:99,fontSize:10,fontWeight:800,padding:"1px 6px"}}>{aA}</span>}
+          </button>})}
+        <button onClick={()=>setManA(true)} style={{background:"none",border:"1px dashed "+BD,borderRadius:22,padding:"8px 13px",cursor:"pointer",color:MT,fontSize:13}}>⚙</button>
+      </div>
+    </div>
+    {alerts.length>0&&<div className="fi" style={{margin:"14px 16px 0",background:"rgba(245,158,11,0.05)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:12,padding:"12px 16px"}}>
+      <div style={{fontSize:10,color:WN,textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:600,marginBottom:10}}>⚠ Use Before They Expire</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+        {alerts.map(b=>{const d=dLeft(pEnd(b.per,b.semi));return(
+          <div key={b.id} onClick={()=>{setSel(b._card.id);setTab("all")}} style={{background:"rgba(245,158,11,0.09)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:20,padding:"5px 12px",fontSize:12,color:"#F5C842",display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}>
+            <span style={{opacity:0.6,fontWeight:600}}>{b._card&&b._card.sh}</span>
+            <span style={{color:"rgba(255,255,255,0.15)"}}>·</span>
+            <span>{b.nm}</span>
+            {b.val>0&&<span style={{fontWeight:700,color:WN}}>${b.val}</span>}
+            <span style={{background:"rgba(245,158,11,0.25)",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700,color:WN}}>{d===0?"Today!":d+"d"}</span>
+          </div>)})}
+      </div>
+    </div>}
+    <div style={{paddingTop:18,overflowX:"auto",display:"flex",gap:12,paddingLeft:16,paddingRight:16,paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
+      {acc&&acc.cards.map(c=>{
+        const is=c.id===sel;const pct=c.benefits.length?Math.round(c.benefits.filter(b=>b.used).length/c.benefits.length*100):0;const cA=c.benefits.filter(b=>isExp(b)).length;
+        return <div key={c.id} className="cc fi" onClick={()=>{setSel(c.id);setTab("all")}} style={{flexShrink:0,width:165,height:105,background:c.gr,borderRadius:14,border:is?"2px solid "+c.ac:"2px solid rgba(255,255,255,0.06)",cursor:"pointer",position:"relative",overflow:"hidden",boxShadow:is?"0 4px 24px "+c.ac+"38":"none",transition:"box-shadow 0.2s"}}>
+          <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,transparent 45%,"+c.ac+"18 100%)"}}/>
+          <div className="cdel" onClick={e=>{e.stopPropagation();if(window.confirm("Remove "+c.n+"?"))doRC(c.id)}} style={{position:"absolute",top:6,right:6,width:22,height:22,borderRadius:99,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"rgba(255,255,255,0.75)",cursor:"pointer",zIndex:2,opacity:0,transition:"opacity 0.15s"}}>×</div>
+          <div style={{position:"relative",padding:"11px 13px 10px",height:"100%",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+            <div><div style={{fontSize:9,color:c.tc,opacity:0.6,fontWeight:500}}>{c.net}</div><div style={{fontSize:13,color:c.tc,fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.sh}</div></div>
+            <div>
+              <div style={{height:2,background:"rgba(255,255,255,0.12)",borderRadius:2,marginBottom:7,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:c.ac,borderRadius:2,transition:"width 0.4s"}}/></div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{fontSize:10,color:c.tc,opacity:0.55}}>{c.benefits.filter(b=>b.used).length}/{c.benefits.length}</div>
+                {cA>0&&<div className="ap" style={{background:"rgba(245,158,11,0.22)",borderRadius:10,padding:"1px 7px",fontSize:9,color:WN,fontWeight:700}}>{cA} exp</div>}
+              </div>
+            </div>
+          </div>
+        </div>})}
+      <div onClick={()=>setAddC(true)} style={{flexShrink:0,width:78,height:105,borderRadius:14,border:"2px dashed "+BD,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:5,color:MT,fontSize:22}}>
+        <span>+</span><span style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:500}}>Add Card</span>
+      </div>
+    </div>
+    {card?<div className="fi" style={{margin:"20px 16px 0"}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
+        <div>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,fontWeight:600,color:card.tc||TX,lineHeight:1}}>{card.n}</div>
+          <div style={{fontSize:11,color:MT,marginTop:3}}>
+            {card.benefits.filter(b=>b.used).length}/{card.benefits.length} used
+            {card.benefits.filter(b=>b.val>0).length>0&&" · $"+card.benefits.filter(b=>b.val>0).reduce((s,b)=>s+b.val*((b.usedCount||0)+(b.used?1:0)),0)+" / $"+card.benefits.filter(b=>b.val>0).reduce((s,b)=>s+b.val,0)+" claimed (lifetime)"}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>setAddB(true)} className="bh" style={{background:"rgba(255,255,255,0.05)",border:"1px solid "+BD,color:TX,borderRadius:8,padding:"8px 14px",fontSize:14,cursor:"pointer"}}>+ Benefit</button>
+          <button onClick={()=>doRC(card.id)} className="bh" style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",color:"#EF4444",borderRadius:8,padding:"8px 10px",fontSize:14,cursor:"pointer"}}>✕</button>
+        </div>
+      </div>
+      <RoiPanel card={card} onEditFee={()=>setEditF(true)}/>
+      <QuarterlyPanel card={card}/>
+      <div style={{display:"flex",borderBottom:"1px solid "+BD,marginBottom:16,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+        {TABS.map(p=>{
+          const cnt=card.benefits.filter(b=>p==="all"||b.per===p).length;
+          if(cnt===0&&p!=="all")return null;
+          const lbl=p==="all"?"All":p==="monthly"?"Monthly":p==="quarterly"?"Quarterly":p==="semi-annual"?"Semi-Ann":p.charAt(0).toUpperCase()+p.slice(1);
+          return <button key={p} className="tb" onClick={()=>setTab(p)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:500,whiteSpace:"nowrap",color:tab===p?card.ac||"#C9A84C":MT,padding:"10px 13px 12px",marginBottom:-1,borderBottom:tab===p?"2px solid "+(card.ac||"#C9A84C"):"2px solid transparent"}}>
+            {lbl} <span style={{fontSize:11,opacity:0.45}}>({cnt})</span>
+          </button>})}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:2}}>
+        {visBen.length===0&&<div style={{textAlign:"center",color:MT,fontSize:14,padding:"36px 0"}}>No benefits in this category</div>}
+        {visBen.map(b=>{
+          const iE=isExp(b);const d=b.per!=="ongoing"?dLeft(pEnd(b.per,b.semi)):null;
+          const nY=b.per==="semi-annual"&&pStart(b.per,b.semi)>new Date();
+          return <div key={b.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 10px",borderRadius:10,background:b.used?"rgba(61,186,126,0.04)":"transparent",border:iE?"1px solid rgba(245,158,11,0.22)":"1px solid transparent"}}>
+            <div style={{width:38,height:38,borderRadius:10,flexShrink:0,background:b.used?"rgba(61,186,126,0.12)":card.ac+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:b.used?SC:card.ac}}>
+              {b.used?"✓":cIco(b.cat)}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                <span style={{fontSize:13,fontWeight:500,color:b.used?MT:TX,textDecoration:b.used?"line-through":"none"}}>{b.nm}</span>
+                {b.val>0&&<span style={{fontSize:12,fontWeight:700,padding:"2px 9px",borderRadius:20,background:b.used?"rgba(61,186,126,0.1)":card.ac+"22",color:b.used?SC:card.ac}}>${b.val}</span>}
+                <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"rgba(255,255,255,0.05)",color:MT}}>{pLbl(b.per,b.semi)}</span>
+                {nY&&<span style={{fontSize:11,color:MT}}>starts {b.semi==="H2"?"Jul 1":"Jan 1"}</span>}
+                {b.usedCount>0&&<span style={{fontSize:10,padding:"1px 8px",borderRadius:20,background:"rgba(61,186,126,0.12)",color:SC,fontWeight:500}}>{"used "+b.usedCount+"x"}</span>}
+                {iE&&<span style={{fontSize:11,fontWeight:700,color:WN}}>{d===0?"Expires today!":d+"d left"}</span>}
+              </div>
+              <div style={{fontSize:12,color:MT,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.dc}</div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+              <button className="bh" onClick={()=>togU(card.id,b.id)} style={{background:b.used?"rgba(61,186,126,0.14)":card.ac+"22",border:b.used?"1px solid rgba(61,186,126,0.3)":"1px solid "+card.ac+"44",color:b.used?SC:card.ac,borderRadius:8,padding:"7px 12px",fontSize:13,cursor:"pointer",fontWeight:600,minWidth:88,textAlign:"center"}}>
+                {b.used?"✓ Used":"Mark Used"}
+              </button>
+              <button onClick={()=>doRB(card.id,b.id)} style={{background:"none",border:"none",color:MT,cursor:"pointer",fontSize:22,padding:"2px 6px",lineHeight:1,opacity:0.4}}>×</button>
+            </div>
+          </div>})}
+      </div>
+    </div>:<div style={{textAlign:"center",padding:"60px 20px",color:MT}}>
+      <div style={{fontSize:48,marginBottom:12}}>💳</div>
+      <div style={{fontSize:18,fontWeight:500,color:TX,marginBottom:8}}>No cards yet for {acc&&acc.name}</div>
+      <div style={{fontSize:14,marginBottom:20}}>Add your first card to start tracking benefits</div>
+      <button onClick={()=>setAddC(true)} style={{background:"rgba(255,255,255,0.07)",border:"1px solid "+BD,color:TX,borderRadius:12,padding:"13px 28px",fontSize:16,cursor:"pointer"}}>+ Add Card</button>
+    </div>}
+    {inst&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:SF,borderTop:"1px solid "+BD,padding:"14px 18px",paddingBottom:"calc(16px + env(safe-area-inset-bottom))",zIndex:400}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,maxWidth:820,margin:"0 auto"}}>
+        <div style={{fontSize:32}}>📲</div>
+        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:TX,marginBottom:2}}>Install as iPhone App</div><div style={{fontSize:12,color:MT}}>Tap Share ↑ then "Add to Home Screen"</div></div>
+        <button onClick={()=>setInst(false)} style={{background:"none",border:"none",color:MT,fontSize:24,cursor:"pointer"}}>×</button>
+      </div>
+    </div>}
+    {addC&&<AddCardModal onAdd={doAC} onClose={()=>setAddC(false)}/>}
+    {addB&&card&&<AddBenModal acc={card.ac} cid={card.id} onAdd={doAB} onClose={()=>setAddB(false)}/>}
+    {manA&&<ManageAccModal accs={accs} onRen={doRA} onAdd={doAA} onRem={doRemA} onClose={()=>setManA(false)}/>}
+    {editF&&card&&<EditFeeModal card={card} onSave={p=>{doUM(card.id,p);setEditF(false)}} onClose={()=>setEditF(false)}/>}
+  </div>}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+<script>
+if('serviceWorker'in navigator){const sw="const C='cv1';self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll([]))));self.addEventListener('fetch',e=>e.respondWith(fetch(e.request).catch(()=>caches.match(e.request))));";const b=new Blob([sw],{type:'application/javascript'});navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});}
+</script>
+</body>
+</html>
