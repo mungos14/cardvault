@@ -377,7 +377,7 @@ function App(){
   const [accs,setAccs]=useState(null);const [aid,setAid]=useState("me");const [sel,setSel]=useState(null);
   const [tab,setTab]=useState("all");const [loaded,setLoaded]=useState(false);
   const [addC,setAddC]=useState(false);const [addB,setAddB]=useState(false);
-  const [manA,setManA]=useState(false);const [editF,setEditF]=useState(false);
+  const [manA,setManA]=useState(false);const [editF,setEditF]=useState(false);const [confirmDel,setConfirmDel]=useState(null);
   const [inst,setInst]=useState(false);
   const touchX=useRef(null);
   useEffect(()=>{
@@ -504,13 +504,13 @@ function App(){
             </div>
           </div>})}
       </div>
-      <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:12,marginTop:6}}>
+      <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:10,marginTop:6}}>
         <button onClick={goPrev} style={{background:"none",border:"none",color:selIdx>0?TX:MT,fontSize:18,cursor:"pointer",padding:"4px 10px",opacity:selIdx>0?1:0.3}}>‹</button>
-        <div style={{display:"flex",gap:5}}>
+        <div style={{display:"flex",gap:5,alignItems:"center"}}>
           {acc&&acc.cards.map((c,ci)=><div key={c.id} onClick={()=>{setSel(c.id);setTab("all")}} style={{width:ci===selIdx?18:6,height:6,borderRadius:3,background:ci===selIdx?(c.ac||TX):"rgba(255,255,255,0.15)",cursor:"pointer",transition:"all 0.25s"}}/>)}
-          <div onClick={()=>setAddC(true)} style={{width:6,height:6,borderRadius:3,background:"rgba(255,255,255,0.1)",cursor:"pointer",border:"1px dashed rgba(255,255,255,0.2)"}}/>
         </div>
         <button onClick={goNext} style={{background:"none",border:"none",color:selIdx<(acc?acc.cards.length-1:0)?TX:MT,fontSize:18,cursor:"pointer",padding:"4px 10px",opacity:selIdx<(acc?acc.cards.length-1:0)?1:0.3}}>›</button>
+        <button onClick={()=>setAddC(true)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid "+BD,color:TX,borderRadius:8,padding:"5px 14px",fontSize:12,cursor:"pointer",marginLeft:4}}>+ Add Card</button>
       </div>
     </div>
     {card?<div className="fi" style={{margin:"20px 16px 0"}}>
@@ -524,7 +524,11 @@ function App(){
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setAddB(true)} className="bh" style={{background:"rgba(255,255,255,0.05)",border:"1px solid "+BD,color:TX,borderRadius:8,padding:"8px 14px",fontSize:14,cursor:"pointer"}}>+ Benefit</button>
-          <button onClick={()=>doRC(card.id)} className="bh" style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",color:"#EF4444",borderRadius:8,padding:"8px 10px",fontSize:14,cursor:"pointer"}}>✕</button>
+          {confirmDel===card.id?<div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <span style={{fontSize:12,color:"#EF4444"}}>Are you sure you want to delete?</span>
+            <button onClick={()=>{doRC(card.id);setConfirmDel(null)}} className="bh" style={{background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.4)",color:"#EF4444",borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",fontWeight:600}}>Yes</button>
+            <button onClick={()=>setConfirmDel(null)} className="bh" style={{background:"rgba(255,255,255,0.05)",border:"1px solid "+BD,color:MT,borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer"}}>No</button>
+          </div>:<button onClick={()=>setConfirmDel(card.id)} className="bh" style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",color:"#EF4444",borderRadius:8,padding:"8px 10px",fontSize:14,cursor:"pointer"}}>✕</button>}
         </div>
       </div>
       <RoiPanel card={card} onEditFee={()=>setEditF(true)}/>
