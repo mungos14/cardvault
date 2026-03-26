@@ -379,6 +379,7 @@ function App(){
   const [addC,setAddC]=useState(false);const [addB,setAddB]=useState(false);
   const [manA,setManA]=useState(false);const [editF,setEditF]=useState(false);
   const [inst,setInst]=useState(false);
+  const touchX=useRef(null);
   useEffect(()=>{
     const isPWA=window.navigator.standalone||window.matchMedia("(display-mode: standalone)").matches;
     if(!isPWA)setInst(true);
@@ -401,14 +402,21 @@ function App(){
   const doAA=(nm,em)=>{const na={id:uid(),name:nm,emoji:em,cards:[]};setAccs(p=>[...p,na])};
   const doRemA=id=>setAccs(p=>{const n=p.filter(a=>a.id!==id);if(aid===id){setAid(n[0]&&n[0].id);setSel(n[0]&&n[0].cards[0]&&n[0].cards[0].id||null)}return n});
   const doUM=(cid,patch)=>upd(aid,cs=>cs.map(c=>c.id!==cid?c:{...c,...patch}));
+  const moveCard=(cid,dir)=>{upd(aid,cs=>{const i=cs.findIndex(c=>c.id===cid);if(i<0)return cs;const j=i+dir;if(j<0||j>=cs.length)return cs;const n=[...cs];[n[i],n[j]]=[n[j],n[i]];return n})};
+  const selIdx=acc?acc.cards.findIndex(c=>c.id===sel):-1;
+  const goPrev=()=>{if(acc&&selIdx>0){setSel(acc.cards[selIdx-1].id);setTab("all")}};
+  const goNext=()=>{if(acc&&selIdx<acc.cards.length-1){setSel(acc.cards[selIdx+1].id);setTab("all")}};
+  const onTS=e=>{touchX.current=e.touches[0].clientX};
+  const onTE=e=>{if(touchX.current===null)return;const dx=e.changedTouches[0].clientX-touchX.current;touchX.current=null;if(Math.abs(dx)>40){dx>0?goPrev():goNext()}};
   if(!loaded||!accs)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:BG,color:MT}}>Loading vault...</div>;
   const allB=acc?acc.cards.flatMap(c=>c.benefits.map(b=>({...b,_card:c}))):[];
   const alerts=allB.filter(b=>isExp(b));
   const totV=allB.filter(b=>b.val>0).reduce((s,b)=>s+b.val,0);
   const useV=allB.filter(b=>b.val>0).reduce((s,b)=>s+b.val*((b.usedCount||0)+(b.used?1:0)),0);
+  const totFee=acc?acc.cards.reduce((s,c)=>s+(c.fee||0),0):0;
   const visBen=card?card.benefits.filter(b=>tab==="all"||b.per===tab):[];
   const TABS=["all","monthly","quarterly","semi-annual","annual","ongoing"];
-  return <div style={{fontFamily:"'Outfit',sans-serif",background:BG,minHeight:"100vh",color:TX,maxWidth:820,margin:"0 auto",paddingBottom:inst?110:80}}>
+  return <div style={{fontFamily:"'Outfit',sans-serif",background:BG,minHeight:"100vh",color:TX,maxWidth:1100,margin:"0 auto",paddingBottom:inst?110:80}}>
     <div style={{padding:"16px 18px 12px",background:SF,borderBottom:"1px solid "+BD,position:"sticky",top:0,zIndex:100}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:12}}>
         <div>
@@ -417,6 +425,7 @@ function App(){
         </div>
         <div style={{display:"flex",gap:14,alignItems:"center"}}>
           <div style={{textAlign:"right"}}><div style={{fontSize:9,color:MT,textTransform:"uppercase"}}>Total Value</div><div style={{fontSize:17,fontWeight:600,color:"#F0EBD8"}}>${totV.toLocaleString()}</div></div>
+          <div style={{textAlign:"right"}}><div style={{fontSize:9,color:MT,textTransform:"uppercase"}}>Annual Fees</div><div style={{fontSize:17,fontWeight:600,color:WN}}>${totFee.toLocaleString()}</div></div>
           <div style={{textAlign:"right"}}><div style={{fontSize:9,color:MT,textTransform:"uppercase"}}>Claimed</div><div style={{fontSize:17,fontWeight:600,color:SC}}>${useV.toLocaleString()}</div></div>
           {alerts.length>0&&<div className="ap" style={{background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.3)",borderRadius:10,padding:"6px 11px",textAlign:"center"}}>
             <div style={{fontSize:15,fontWeight:700,color:WN,lineHeight:1}}>{alerts.length}</div>
@@ -446,25 +455,62 @@ function App(){
           </div>)})}
       </div>
     </div>}
-    <div style={{paddingTop:18,overflowX:"auto",display:"flex",gap:12,paddingLeft:16,paddingRight:16,paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
-      {acc&&acc.cards.map(c=>{
-        const is=c.id===sel;const pct=c.benefits.length?Math.round(c.benefits.filter(b=>b.used).length/c.benefits.length*100):0;const cA=c.benefits.filter(b=>isExp(b)).length;
-        return <div key={c.id} className="cc fi" onClick={()=>{setSel(c.id);setTab("all")}} style={{flexShrink:0,width:165,height:105,background:c.gr,borderRadius:14,border:is?"2px solid "+c.ac:"2px solid rgba(255,255,255,0.06)",cursor:"pointer",position:"relative",overflow:"hidden",boxShadow:is?"0 4px 24px "+c.ac+"38":"none",transition:"box-shadow 0.2s"}}>
-          <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,transparent 45%,"+c.ac+"18 100%)"}}/>
-          <div className="cdel" onClick={e=>{e.stopPropagation();if(window.confirm("Remove "+c.n+"?"))doRC(c.id)}} style={{position:"absolute",top:6,right:6,width:22,height:22,borderRadius:99,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"rgba(255,255,255,0.75)",cursor:"pointer",zIndex:2,opacity:0,transition:"opacity 0.15s"}}>×</div>
-          <div style={{position:"relative",padding:"11px 13px 10px",height:"100%",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
-            <div><div style={{fontSize:9,color:c.tc,opacity:0.6,fontWeight:500}}>{c.net}</div><div style={{fontSize:13,color:c.tc,fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.sh}</div></div>
-            <div>
-              <div style={{height:2,background:"rgba(255,255,255,0.12)",borderRadius:2,marginBottom:7,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:c.ac,borderRadius:2,transition:"width 0.4s"}}/></div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                <div style={{fontSize:10,color:c.tc,opacity:0.55}}>{c.benefits.filter(b=>b.used).length}/{c.benefits.length}</div>
-                {cA>0&&<div className="ap" style={{background:"rgba(245,158,11,0.22)",borderRadius:10,padding:"1px 7px",fontSize:9,color:WN,fontWeight:700}}>{cA} exp</div>}
+    <div style={{padding:"14px 16px 6px"}}>
+      <div style={{position:"relative",height:160,maxWidth:420,margin:"0 auto",perspective:800}}
+        onTouchStart={onTS} onTouchEnd={onTE}>
+        {acc&&acc.cards.map((c,ci)=>{
+          const is=ci===selIdx;
+          const diff=ci-selIdx;
+          const pct=c.benefits.length?Math.round(c.benefits.filter(b=>b.used).length/c.benefits.length*100):0;
+          const cA=c.benefits.filter(b=>isExp(b)).length;
+          const absD=Math.abs(diff);
+          const tx=is?0:diff*55;
+          const sc=is?1:Math.max(0.85,1-absD*0.05);
+          const op=absD>3?0:is?1:Math.max(0.4,1-absD*0.2);
+          const z=100-absD;
+          return <div key={c.id} onClick={()=>{setSel(c.id);setTab("all")}}
+            style={{position:"absolute",left:"50%",top:0,width:300,height:150,
+              marginLeft:-150,
+              background:c.gr,borderRadius:16,
+              border:is?"2px solid "+c.ac:"1px solid rgba(255,255,255,0.08)",
+              cursor:"pointer",overflow:"hidden",
+              boxShadow:is?"0 8px 30px "+c.ac+"40":"0 2px 12px rgba(0,0,0,0.4)",
+              transform:"translateX("+tx+"px) scale("+sc+")",
+              opacity:op,zIndex:z,
+              transition:"all 0.35s cubic-bezier(0.4,0,0.2,1)",
+              pointerEvents:absD>3?"none":"auto"}}>
+            <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,transparent 40%,"+c.ac+"15 100%)"}}/>
+            <div style={{position:"relative",padding:"14px 18px",height:"100%",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div>
+                  <div style={{fontSize:10,color:c.tc,opacity:0.5,fontWeight:500}}>{c.net}</div>
+                  <div style={{fontSize:18,color:c.tc,fontWeight:600,marginTop:2}}>{c.sh}</div>
+                </div>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  {cA>0&&<div className="ap" style={{background:"rgba(245,158,11,0.3)",borderRadius:8,padding:"2px 8px",fontSize:10,color:WN,fontWeight:700}}>{cA} exp</div>}
+                  {is&&<button onClick={e=>{e.stopPropagation();moveCard(c.id,-1)}} style={{background:"rgba(0,0,0,0.35)",border:"none",color:c.tc,borderRadius:6,width:24,height:24,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:selIdx>0?1:0.3}}>◀</button>}
+                  {is&&<button onClick={e=>{e.stopPropagation();moveCard(c.id,1)}} style={{background:"rgba(0,0,0,0.35)",border:"none",color:c.tc,borderRadius:6,width:24,height:24,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:selIdx<(acc?acc.cards.length-1:0)?1:0.3}}>▶</button>}
+                </div>
+              </div>
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div style={{fontSize:11,color:c.tc,opacity:0.6}}>{c.benefits.filter(b=>b.used).length}/{c.benefits.length} used</div>
+                  {c.fee>0&&<div style={{fontSize:11,color:c.tc,opacity:0.5}}>${c.fee}/yr</div>}
+                </div>
+                <div style={{height:3,background:"rgba(255,255,255,0.12)",borderRadius:2,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:pct+"%",background:c.ac,borderRadius:2,transition:"width 0.4s"}}/>
+                </div>
               </div>
             </div>
-          </div>
-        </div>})}
-      <div onClick={()=>setAddC(true)} style={{flexShrink:0,width:78,height:105,borderRadius:14,border:"2px dashed "+BD,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:5,color:MT,fontSize:22}}>
-        <span>+</span><span style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:500}}>Add Card</span>
+          </div>})}
+      </div>
+      <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:12,marginTop:6}}>
+        <button onClick={goPrev} style={{background:"none",border:"none",color:selIdx>0?TX:MT,fontSize:18,cursor:"pointer",padding:"4px 10px",opacity:selIdx>0?1:0.3}}>‹</button>
+        <div style={{display:"flex",gap:5}}>
+          {acc&&acc.cards.map((c,ci)=><div key={c.id} onClick={()=>{setSel(c.id);setTab("all")}} style={{width:ci===selIdx?18:6,height:6,borderRadius:3,background:ci===selIdx?(c.ac||TX):"rgba(255,255,255,0.15)",cursor:"pointer",transition:"all 0.25s"}}/>)}
+          <div onClick={()=>setAddC(true)} style={{width:6,height:6,borderRadius:3,background:"rgba(255,255,255,0.1)",cursor:"pointer",border:"1px dashed rgba(255,255,255,0.2)"}}/>
+        </div>
+        <button onClick={goNext} style={{background:"none",border:"none",color:selIdx<(acc?acc.cards.length-1:0)?TX:MT,fontSize:18,cursor:"pointer",padding:"4px 10px",opacity:selIdx<(acc?acc.cards.length-1:0)?1:0.3}}>›</button>
       </div>
     </div>
     {card?<div className="fi" style={{margin:"20px 16px 0"}}>
@@ -527,7 +573,7 @@ function App(){
       <button onClick={()=>setAddC(true)} style={{background:"rgba(255,255,255,0.07)",border:"1px solid "+BD,color:TX,borderRadius:12,padding:"13px 28px",fontSize:16,cursor:"pointer"}}>+ Add Card</button>
     </div>}
     {inst&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:SF,borderTop:"1px solid "+BD,padding:"14px 18px",paddingBottom:"calc(16px + env(safe-area-inset-bottom))",zIndex:400}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,maxWidth:820,margin:"0 auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,maxWidth:1100,margin:"0 auto"}}>
         <div style={{fontSize:32}}>📲</div>
         <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:TX,marginBottom:2}}>Install as iPhone App</div><div style={{fontSize:12,color:MT}}>Tap Share ↑ then "Add to Home Screen"</div></div>
         <button onClick={()=>setInst(false)} style={{background:"none",border:"none",color:MT,fontSize:24,cursor:"pointer"}}>×</button>
@@ -541,7 +587,7 @@ function App(){
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 <script>
-if('serviceWorker'in navigator){const sw="const C='cv1';self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll([]))));self.addEventListener('fetch',e=>e.respondWith(fetch(e.request).catch(()=>caches.match(e.request))));";const b=new Blob([sw],{type:'application/javascript'});navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});}
+if('serviceWorker'in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(sw=>sw.unregister()));caches.keys().then(k=>k.forEach(c=>caches.delete(c)));}
 </script>
 </body>
 </html>
