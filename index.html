@@ -382,12 +382,12 @@ function App(){
   useEffect(()=>{
     const isPWA=window.navigator.standalone||window.matchMedia("(display-mode: standalone)").matches;
     if(!isPWA)setInst(true);
-    const saved=ld("cv11");
+    const saved=ld("cardvault");
     if(saved){const r=saved.map(a=>({...a,cards:applyResets(a.cards)}));setAccs(r);setAid(r[0]&&r[0].id);setSel(r[0]&&r[0].cards[0]&&r[0].cards[0].id||null)}
     else{const a=DA.map(a=>({...a,cards:applyResets(a.cards)}));setAccs(a);setSel(a[0]&&a[0].cards[0]&&a[0].cards[0].id||null)}
     setLoaded(true)
   },[]);
-  useEffect(()=>{if(loaded&&accs)sv("cv11",accs)},[accs,loaded]);
+  useEffect(()=>{if(loaded&&accs)sv("cardvault",accs)},[accs,loaded]);
   const upd=(id,fn)=>setAccs(p=>p.map(a=>a.id!==id?a:{...a,cards:fn(a.cards)}));
   const acc=accs&&accs.find(a=>a.id===aid);
   const card=acc&&(acc.cards.find(c=>c.id===sel)||acc.cards[0]);
